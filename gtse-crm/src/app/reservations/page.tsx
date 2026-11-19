@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NewBookingModal } from './new-booking-modal';
 
 import {
   Table,
@@ -36,26 +37,52 @@ export default async function ReservationsPage({
   const query = (params.q || '').trim().toLowerCase();
   const stageFilter = params.stage || 'all';
 
-  const { data: bookings, error } = await supabase
-    .from('bookings')
-    .select(`
-      id,
-      inquiry_number,
-      invoice_number,
-      stage,
-      delivery_stage,
-      execution_date,
-      destination_city,
-      participant_count,
-      category,
-      client_price,
-      last_touched_at,
-      organizations ( name ),
-      sports_events ( name ),
-      reservations_owner:profiles!reservations_owner_id ( full_name ),
-      booking_supplier_costs ( net_cost )
-    `)
-    .order('created_at', { ascending: false });
+  const [
+    { data: bookings, error },
+    { data: organizations },
+    { data: contacts },
+    { data: events },
+    { data: staff },
+    ] = await Promise.all([
+    supabase
+        .from('bookings')
+        .select(`
+        id,
+        inquiry_number,
+        invoice_number,
+        stage,
+        delivery_stage,
+        execution_date,
+        destination_city,
+        participant_count,
+        category,
+        client_price,
+        last_touched_at,
+        organizations ( name ),
+        sports_events ( name ),
+        reservations_owner:profiles!reservations_owner_id ( full_name ),
+        booking_supplier_costs ( net_cost )
+        `)
+        .order('created_at', { ascending: false }),
+    supabase
+        .from('organizations')
+        .select('id, name')
+        .neq('type', 'supplier')
+        .order('name'),
+    supabase
+        .from('contacts')
+        .select('id, organization_id, first_name, last_name')
+        .order('first_name'),
+    supabase
+        .from('sports_events')
+        .select('id, name, city, start_date')
+        .order('start_date'),
+    supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('role', ['reservations', 'admin'])
+        .order('full_name'),
+    ]);
 
   if (error) {
     throw new Error(`Failed to load bookings: ${error.message}`);
@@ -114,6 +141,13 @@ export default async function ReservationsPage({
               Manage assigned bookings, track untouched inquiries, and monitor supplier margins.
             </p>
           </div>
+          <NewBookingModal
+            organizations={organizations || []}
+            contacts={contacts || []}
+            events={events || []}
+            staff={staff || []}
+            currentUserId={profile.id}
+            />
         </div>
 
         {/* Confirmed Financial KPI Cards */}

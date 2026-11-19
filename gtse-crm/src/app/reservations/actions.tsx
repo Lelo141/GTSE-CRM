@@ -107,3 +107,50 @@ export async function deleteSupplierCostAction(costId: string, bookingId: string
   revalidatePath('/reservations');
   revalidatePath(`/reservations/${bookingId}`);
 }
+
+export async function createDirectBookingAction(formData: FormData) {
+  const { supabase } = await requireRole(['reservations', 'admin']);
+
+  const organizationId = String(formData.get('organization_id') || '');
+  if (!organizationId) {
+    return { error: 'Please select an agency or client organization.' };
+  }
+
+  const contactId = String(formData.get('contact_id') || '') || null;
+  const eventId = String(formData.get('event_id') || '') || null;
+  const ownerId = String(formData.get('reservations_owner_id') || '') || null;
+  const stage = String(formData.get('stage') || 'new_inquiry');
+  const invoiceNumber = String(formData.get('invoice_number') || '').trim() || null;
+  const executionDate = String(formData.get('execution_date') || '') || null;
+  const destinationCity = String(formData.get('destination_city') || '').trim() || null;
+  const serviceDescription = String(formData.get('service_description') || '').trim() || null;
+  const participantCount = Math.max(1, Number(formData.get('participant_count') || 1));
+  const clientPrice = Math.max(0, Number(formData.get('client_price') || 0));
+
+  const { data, error } = await supabase
+    .from('bookings')
+    .insert({
+      organization_id: organizationId,
+      contact_id: contactId,
+      event_id: eventId,
+      reservations_owner_id: ownerId,
+      stage,
+      confirmed_date: stage === 'confirmed' ? new Date().toISOString().slice(0, 10) : null,
+      invoice_number: invoiceNumber,
+      execution_date: executionDate,
+      destination_city: destinationCity,
+      service_description: serviceDescription,
+      participant_count: participantCount,
+      client_price: clientPrice,
+      last_touched_at: new Date().toISOString(),
+    })
+    .select('id')
+    .single();
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath('/reservations');
+  return { id: data.id };
+}
